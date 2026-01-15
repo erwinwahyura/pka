@@ -1,0 +1,226 @@
+package storage
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/erwar/pka/internal/book"
+	_ "github.com/mattn/go-sqlite3"
+)
+
+type SQLiteRepository struct {
+	db *sql.DB
+}
+
+func NewSQLiteRepository(dbPath string) (*SQLiteRepository, error) {
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	repo := &SQLiteRepository{db: db}
+	if err := repo.migrate(); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
+	return repo, nil
+}
+
+func (r *SQLiteRepository) migrate() error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS books (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		title TEXT NOT NULL,
+		author TEXT NOT NULL,
+		isbn TEXT,
+		description TEXT,
+		genre TEXT,
+		tags TEXT,
+		rating INTEGER,
+		status TEXT NOT NULL DEFAULT 'want_to_read',
+		notes TEXT,
+		date_added DATETIME NOT NULL,
+		date_read DATETIME,
+		embedding BLOB
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_books_status ON books(status);
+	CREATE INDEX IF NOT EXISTS idx_books_author ON books(author);
+	`
+	_, err := r.db.Exec(schema)
+	return err
+}
+
+func (r *SQLiteRepository) Close() error {
+	return r.db.Close()
+}
+
+func (r *SQLiteRepository) Create(ctx context.Context, b *book.Book) error {
+	tags, _ := json.Marshal(b.Tags)
+
+	result, err := r.db.ExecContext(ctx, `
+		INSERT INTO books (title, author, isbn, description, genre, tags, rating, status, notes, date_added, date_read)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.Rating, b.Status, b.Notes, b.DateAdded, nullTime(b.DateRead))
+
+	if err != nil {
+		return fmt.Errorf("insert: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	b.ID = id
+
+	return nil
+}
+
+func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (*book.Book, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, title, author, isbn, description, genre, tags, rating, status, notes, date_added, date_read, embedding
+		FROM books WHERE id = ?
+	`, id)
+
+	return r.scanBook(row)
+}
+
+func (r *SQLiteRepository) GetAll(ctx context.Context) ([]book.Book, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, title, author, isbn, description, genre, tags, rating, status, notes, date_added, date_read, embedding
+		FROM books ORDER BY date_added DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanBooks(rows)
+}
+
+func (r *SQLiteRepository) GetByStatus(ctx context.Context, status book.Status) ([]book.Book, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, title, author, isbn, description, genre, tags, rating, status, notes, date_added, date_read, embedding
+		FROM books WHERE status = ? ORDER BY date_added DESC
+	`, status)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanBooks(rows)
+}
+
+func (r *SQLiteRepository) Update(ctx context.Context, b *book.Book) error {
+	tags, _ := json.Marshal(b.Tags)
+
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE books SET
+			title = ?, author = ?, isbn = ?, description = ?, genre = ?,
+			tags = ?, rating = ?, status = ?, notes = ?, date_read = ?
+		WHERE id = ?
+	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.Rating, b.Status, b.Notes, nullTime(b.DateRead), b.ID)
+
+	return err
+}
+
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM books WHERE id = ?", id)
+	return err
+}
+
+func (r *SQLiteRepository) UpdateEmbedding(ctx context.Context, id int64, embedding []float32) error {
+	blob, err := encodeEmbedding(embedding)
+	if err != nil {
+		return fmt.Errorf("encode embedding: %w", err)
+	}
+
+	_, err = r.db.ExecContext(ctx, "UPDATE books SET embedding = ? WHERE id = ?", blob, id)
+	return err
+}
+
+func (r *SQLiteRepository) GetAllWithEmbeddings(ctx context.Context) ([]book.Book, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, title, author, isbn, description, genre, tags, rating, status, notes, date_added, date_read, embedding
+		FROM books WHERE embedding IS NOT NULL
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	return r.scanBooks(rows)
+}
+
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
+	var b book.Book
+	var tagsJSON string
+	var dateRead sql.NullTime
+	var embeddingBlob []byte
+
+	err := s.Scan(
+		&b.ID, &b.Title, &b.Author, &b.ISBN, &b.Description, &b.Genre,
+		&tagsJSON, &b.Rating, &b.Status, &b.Notes, &b.DateAdded, &dateRead, &embeddingBlob,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if tagsJSON != "" {
+		json.Unmarshal([]byte(tagsJSON), &b.Tags)
+	}
+	if dateRead.Valid {
+		b.DateRead = dateRead.Time
+	}
+	if len(embeddingBlob) > 0 {
+		b.Embedding, _ = decodeEmbedding(embeddingBlob)
+	}
+
+	return &b, nil
+}
+
+func (r *SQLiteRepository) scanBooks(rows *sql.Rows) ([]book.Book, error) {
+	var books []book.Book
+	for rows.Next() {
+		b, err := r.scanBook(rows)
+		if err != nil {
+			return nil, err
+		}
+		books = append(books, *b)
+	}
+	return books, rows.Err()
+}
+
+func nullTime(t time.Time) sql.NullTime {
+	if t.IsZero() {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Time: t, Valid: true}
+}
+
+func encodeEmbedding(embedding []float32) ([]byte, error) {
+	parts := make([]string, len(embedding))
+	for i, v := range embedding {
+		parts[i] = fmt.Sprintf("%f", v)
+	}
+	return []byte(strings.Join(parts, ",")), nil
+}
+
+func decodeEmbedding(blob []byte) ([]float32, error) {
+	parts := strings.Split(string(blob), ",")
+	embedding := make([]float32, len(parts))
+	for i, p := range parts {
+		var v float32
+		fmt.Sscanf(p, "%f", &v)
+		embedding[i] = v
+	}
+	return embedding, nil
+}
