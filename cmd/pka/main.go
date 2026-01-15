@@ -1183,13 +1183,19 @@ func promptAndAddBooks(ctx context.Context, svc *book.Service, books []book.Book
 
 // Helper function to add multiple books with progress display
 func addBooksWithProgress(ctx context.Context, svc *book.Service, books []book.Book) error {
-	var added, failed int
+	var added, skipped, failed int
 
 	for i, b := range books {
 		bookCopy := b // Create a copy to get pointer
 		fmt.Printf("[%d/%d] Adding: %s...", i+1, len(books), b.Title)
 
 		if err := svc.Add(ctx, &bookCopy); err != nil {
+			// Check if it's a duplicate error
+			if dupErr, ok := err.(*book.DuplicateError); ok {
+				fmt.Printf(" SKIPPED (duplicate of ID %d)\n", dupErr.Existing.ID)
+				skipped++
+				continue
+			}
 			fmt.Printf(" ERROR: %v\n", err)
 			failed++
 			continue
@@ -1204,6 +1210,6 @@ func addBooksWithProgress(ctx context.Context, svc *book.Service, books []book.B
 		}
 	}
 
-	fmt.Printf("\nDone! Added: %d, Failed: %d\n", added, failed)
+	fmt.Printf("\nDone! Added: %d, Skipped (duplicates): %d, Failed: %d\n", added, skipped, failed)
 	return nil
 }

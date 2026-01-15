@@ -156,6 +156,47 @@ func (r *SQLiteRepository) GetAllWithEmbeddings(ctx context.Context) ([]book.Boo
 	return r.scanBooks(rows)
 }
 
+func (r *SQLiteRepository) FindByISBN(ctx context.Context, isbn string) (*book.Book, error) {
+	if isbn == "" {
+		return nil, nil
+	}
+
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, title, author, isbn, description, genre, tags, rating, status, notes, date_added, date_read, embedding
+		FROM books WHERE isbn = ? LIMIT 1
+	`, isbn)
+
+	b, err := r.scanBook(row)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return b, nil
+}
+
+func (r *SQLiteRepository) FindByTitleAuthor(ctx context.Context, title, author string) (*book.Book, error) {
+	if title == "" || author == "" {
+		return nil, nil
+	}
+
+	// Case-insensitive search using LOWER()
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, title, author, isbn, description, genre, tags, rating, status, notes, date_added, date_read, embedding
+		FROM books WHERE LOWER(title) = LOWER(?) AND LOWER(author) = LOWER(?) LIMIT 1
+	`, title, author)
+
+	b, err := r.scanBook(row)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return b, nil
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }
