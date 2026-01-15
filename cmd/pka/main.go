@@ -54,6 +54,9 @@ Search by vibes ("dark thriller with plot twists"), track reading status, and fi
 		bulkImportCmd(),
 		exportCmd(),
 		statsCmd(),
+		scrapeAuthorCmd(),
+		scrapeSubjectCmd(),
+		scrapeTrendingCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -914,4 +917,293 @@ func statsCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func scrapeAuthorCmd() *cobra.Command {
+	var limit int
+	var addAll bool
+	var source string
+
+	cmd := &cobra.Command{
+		Use:   "scrape-author [author name]",
+		Short: "Scrape all books by an author",
+		Long: `Fetch all books by an author from OpenLibrary or Google Books.
+
+Examples:
+  pka scrape-author "Brandon Sanderson"
+  pka scrape-author "Andy Weir" --add-all
+  pka scrape-author "Stephen King" --limit 100 --source google`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, cleanup, err := initServices()
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			authorName := strings.Join(args, " ")
+			ctx := context.Background()
+
+			var books []book.Book
+
+			fmt.Printf("Searching for books by %s (source: %s)...\n\n", authorName, source)
+
+			switch source {
+			case "openlibrary", "ol":
+				client := scraper.NewOpenLibraryClient()
+				books, err = client.FetchAuthorBooks(ctx, authorName, limit)
+			case "google", "gb":
+				client := scraper.NewGoogleBooksClient("")
+				books, err = client.SearchByAuthor(ctx, authorName, limit)
+			default:
+				return fmt.Errorf("unknown source: %s (use: openlibrary, google)", source)
+			}
+
+			if err != nil {
+				return err
+			}
+
+			if len(books) == 0 {
+				fmt.Println("No books found.")
+				return nil
+			}
+
+			fmt.Printf("Found %d books:\n\n", len(books))
+			for i, b := range books {
+				fmt.Printf("[%d] %s", i+1, b.Title)
+				if b.Author != "" {
+					fmt.Printf(" by %s", b.Author)
+				}
+				fmt.Println()
+			}
+
+			if addAll {
+				fmt.Printf("\nAdding all %d books...\n", len(books))
+				return addBooksWithProgress(ctx, svc, books)
+			}
+
+			return promptAndAddBooks(ctx, svc, books)
+		},
+	}
+
+	cmd.Flags().IntVarP(&limit, "limit", "l", 50, "max books to fetch")
+	cmd.Flags().BoolVar(&addAll, "add-all", false, "add all books without prompting")
+	cmd.Flags().StringVar(&source, "source", "openlibrary", "data source (openlibrary, google)")
+	return cmd
+}
+
+func scrapeSubjectCmd() *cobra.Command {
+	var limit int
+	var addAll bool
+	var source string
+
+	cmd := &cobra.Command{
+		Use:   "scrape-subject [subject/genre]",
+		Short: "Scrape books by subject or genre",
+		Long: `Fetch books by subject/genre from OpenLibrary or Google Books.
+
+Popular subjects: science_fiction, fantasy, mystery, thriller, romance,
+horror, biography, history, philosophy, poetry, art, music, cooking
+
+Examples:
+  pka scrape-subject "science fiction"
+  pka scrape-subject fantasy --add-all
+  pka scrape-subject "artificial intelligence" --source google
+  pka scrape-subject thriller --limit 100`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, cleanup, err := initServices()
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			subject := strings.Join(args, " ")
+			ctx := context.Background()
+
+			var books []book.Book
+
+			fmt.Printf("Searching for %s books (source: %s)...\n\n", subject, source)
+
+			switch source {
+			case "openlibrary", "ol":
+				client := scraper.NewOpenLibraryClient()
+				books, err = client.FetchBySubject(ctx, subject, limit)
+			case "google", "gb":
+				client := scraper.NewGoogleBooksClient("")
+				books, err = client.SearchBySubject(ctx, subject, limit)
+			default:
+				return fmt.Errorf("unknown source: %s (use: openlibrary, google)", source)
+			}
+
+			if err != nil {
+				return err
+			}
+
+			if len(books) == 0 {
+				fmt.Println("No books found.")
+				return nil
+			}
+
+			fmt.Printf("Found %d books:\n\n", len(books))
+			for i, b := range books {
+				fmt.Printf("[%d] %s", i+1, b.Title)
+				if b.Author != "" {
+					fmt.Printf(" by %s", b.Author)
+				}
+				fmt.Println()
+			}
+
+			if addAll {
+				fmt.Printf("\nAdding all %d books...\n", len(books))
+				return addBooksWithProgress(ctx, svc, books)
+			}
+
+			return promptAndAddBooks(ctx, svc, books)
+		},
+	}
+
+	cmd.Flags().IntVarP(&limit, "limit", "l", 50, "max books to fetch")
+	cmd.Flags().BoolVar(&addAll, "add-all", false, "add all books without prompting")
+	cmd.Flags().StringVar(&source, "source", "openlibrary", "data source (openlibrary, google)")
+	return cmd
+}
+
+func scrapeTrendingCmd() *cobra.Command {
+	var limit int
+	var addAll bool
+	var period string
+
+	cmd := &cobra.Command{
+		Use:   "scrape-trending",
+		Short: "Scrape trending/popular books",
+		Long: `Fetch trending books from OpenLibrary.
+
+Periods: now, daily, weekly, monthly, yearly, forever
+
+Examples:
+  pka scrape-trending
+  pka scrape-trending --period monthly
+  pka scrape-trending --period forever --add-all`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, cleanup, err := initServices()
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			ctx := context.Background()
+			client := scraper.NewOpenLibraryClient()
+
+			fmt.Printf("Fetching trending books (%s)...\n\n", period)
+
+			books, err := client.FetchTrending(ctx, period, limit)
+			if err != nil {
+				return err
+			}
+
+			if len(books) == 0 {
+				fmt.Println("No trending books found.")
+				return nil
+			}
+
+			fmt.Printf("Found %d trending books:\n\n", len(books))
+			for i, b := range books {
+				fmt.Printf("[%d] %s", i+1, b.Title)
+				if b.Author != "" {
+					fmt.Printf(" by %s", b.Author)
+				}
+				fmt.Println()
+			}
+
+			if addAll {
+				fmt.Printf("\nAdding all %d books...\n", len(books))
+				return addBooksWithProgress(ctx, svc, books)
+			}
+
+			return promptAndAddBooks(ctx, svc, books)
+		},
+	}
+
+	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "max books to fetch")
+	cmd.Flags().BoolVar(&addAll, "add-all", false, "add all books without prompting")
+	cmd.Flags().StringVar(&period, "period", "weekly", "trending period (now, daily, weekly, monthly, yearly, forever)")
+	return cmd
+}
+
+// Helper function to prompt user and add selected books
+func promptAndAddBooks(ctx context.Context, svc *book.Service, books []book.Book) error {
+	fmt.Print("\nEnter numbers to add (comma-separated, 'all' for all, 'q' to quit): ")
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	if input == "q" || input == "" {
+		return nil
+	}
+
+	if input == "all" {
+		return addBooksWithProgress(ctx, svc, books)
+	}
+
+	var selected []book.Book
+	for _, numStr := range strings.Split(input, ",") {
+		numStr = strings.TrimSpace(numStr)
+
+		// Handle ranges like "1-5"
+		if strings.Contains(numStr, "-") {
+			parts := strings.Split(numStr, "-")
+			if len(parts) == 2 {
+				start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+				end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+				if err1 == nil && err2 == nil && start >= 1 && end <= len(books) && start <= end {
+					for i := start; i <= end; i++ {
+						selected = append(selected, books[i-1])
+					}
+					continue
+				}
+			}
+		}
+
+		num, err := strconv.Atoi(numStr)
+		if err != nil || num < 1 || num > len(books) {
+			fmt.Printf("Invalid selection: %s\n", numStr)
+			continue
+		}
+		selected = append(selected, books[num-1])
+	}
+
+	if len(selected) == 0 {
+		fmt.Println("No valid selections.")
+		return nil
+	}
+
+	return addBooksWithProgress(ctx, svc, selected)
+}
+
+// Helper function to add multiple books with progress display
+func addBooksWithProgress(ctx context.Context, svc *book.Service, books []book.Book) error {
+	var added, failed int
+
+	for i, b := range books {
+		bookCopy := b // Create a copy to get pointer
+		fmt.Printf("[%d/%d] Adding: %s...", i+1, len(books), b.Title)
+
+		if err := svc.Add(ctx, &bookCopy); err != nil {
+			fmt.Printf(" ERROR: %v\n", err)
+			failed++
+			continue
+		}
+
+		fmt.Printf(" OK (ID: %d)\n", bookCopy.ID)
+		added++
+
+		// Small delay to be nice to embedding service
+		if i < len(books)-1 {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
+	fmt.Printf("\nDone! Added: %d, Failed: %d\n", added, failed)
+	return nil
 }

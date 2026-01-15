@@ -287,3 +287,273 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:maxLen-3] + "..."
 }
+
+// Author search result
+type olAuthorSearch struct {
+	NumFound int               `json:"numFound"`
+	Docs     []olAuthorSearchDoc `json:"docs"`
+}
+
+type olAuthorSearchDoc struct {
+	Key       string `json:"key"`  // e.g., "/authors/OL123A"
+	Name      string `json:"name"`
+	WorkCount int    `json:"work_count"`
+}
+
+// Author works result
+type olAuthorWorks struct {
+	Entries []olAuthorWorkEntry `json:"entries"`
+	Size    int                 `json:"size"`
+}
+
+type olAuthorWorkEntry struct {
+	Title       string `json:"title"`
+	Key         string `json:"key"`
+	Description any    `json:"description"`
+	Subjects    []string `json:"subjects"`
+	Covers      []int  `json:"covers"`
+}
+
+// Subject result
+type olSubjectResult struct {
+	Name      string           `json:"name"`
+	WorkCount int              `json:"work_count"`
+	Works     []olSubjectWork  `json:"works"`
+}
+
+type olSubjectWork struct {
+	Key            string   `json:"key"`
+	Title          string   `json:"title"`
+	Authors        []olSubjectAuthor `json:"authors"`
+	CoverID        int      `json:"cover_id"`
+	FirstPublishYear int    `json:"first_publish_year"`
+	Subject        []string `json:"subject"`
+}
+
+type olSubjectAuthor struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
+}
+
+// Trending result
+type olTrendingResult struct {
+	Works []olTrendingWork `json:"works"`
+}
+
+type olTrendingWork struct {
+	Key         string `json:"key"`
+	Title       string `json:"title"`
+	CoverID     int    `json:"cover_i"`
+	AuthorName  []string `json:"author_name"`
+	AuthorKey   []string `json:"author_key"`
+}
+
+// SearchAuthor searches for an author by name and returns their key
+func (c *OpenLibraryClient) SearchAuthor(ctx context.Context, name string) (string, string, error) {
+	searchURL := fmt.Sprintf("%s/search/authors.json?q=%s&limit=1",
+		c.baseURL, url.QueryEscape(name))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
+	if err != nil {
+		return "", "", err
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("search author: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", "", fmt.Errorf("OpenLibrary returned status %d", resp.StatusCode)
+	}
+
+	var result olAuthorSearch
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", fmt.Errorf("decode author search: %w", err)
+	}
+
+	if len(result.Docs) == 0 {
+		return "", "", fmt.Errorf("author not found: %s", name)
+	}
+
+	return result.Docs[0].Key, result.Docs[0].Name, nil
+}
+
+// FetchAuthorBooks fetches all books by an author
+func (c *OpenLibraryClient) FetchAuthorBooks(ctx context.Context, authorName string, limit int) ([]book.Book, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	// First, find the author
+	authorKey, resolvedName, err := c.SearchAuthor(ctx, authorName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch author's works
+	// authorKey may be just "OL123A" or "/authors/OL123A" depending on API response
+	if !strings.HasPrefix(authorKey, "/") {
+		authorKey = "/authors/" + authorKey
+	}
+	worksURL := fmt.Sprintf("%s%s/works.json?limit=%d", c.baseURL, authorKey, limit)
+	req, err := http.NewRequestWithContext(ctx, "GET", worksURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch author works: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("OpenLibrary returned status %d", resp.StatusCode)
+	}
+
+	var works olAuthorWorks
+	if err := json.NewDecoder(resp.Body).Decode(&works); err != nil {
+		return nil, fmt.Errorf("decode author works: %w", err)
+	}
+
+	books := make([]book.Book, 0, len(works.Entries))
+	for _, entry := range works.Entries {
+		description := extractDescription(entry.Description)
+
+		var tags []string
+		for i, s := range entry.Subjects {
+			if i >= 5 {
+				break
+			}
+			tags = append(tags, s)
+		}
+
+		books = append(books, book.Book{
+			Title:       entry.Title,
+			Author:      resolvedName,
+			Description: truncate(description, 500),
+			Tags:        tags,
+			Status:      book.StatusWantToRead,
+			DateAdded:   time.Now(),
+		})
+	}
+
+	return books, nil
+}
+
+// FetchBySubject fetches books by subject/genre
+func (c *OpenLibraryClient) FetchBySubject(ctx context.Context, subject string, limit int) ([]book.Book, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	// Normalize subject (lowercase, replace spaces with underscores)
+	normalizedSubject := strings.ToLower(strings.ReplaceAll(subject, " ", "_"))
+
+	subjectURL := fmt.Sprintf("%s/subjects/%s.json?limit=%d", c.baseURL, normalizedSubject, limit)
+	req, err := http.NewRequestWithContext(ctx, "GET", subjectURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch subject: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 404 {
+		return nil, fmt.Errorf("subject not found: %s", subject)
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("OpenLibrary returned status %d", resp.StatusCode)
+	}
+
+	var result olSubjectResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode subject: %w", err)
+	}
+
+	books := make([]book.Book, 0, len(result.Works))
+	for _, work := range result.Works {
+		var authorNames []string
+		for _, a := range work.Authors {
+			authorNames = append(authorNames, a.Name)
+		}
+
+		var tags []string
+		for i, s := range work.Subject {
+			if i >= 5 {
+				break
+			}
+			tags = append(tags, s)
+		}
+
+		books = append(books, book.Book{
+			Title:     work.Title,
+			Author:    strings.Join(authorNames, ", "),
+			Genre:     result.Name,
+			Tags:      tags,
+			Status:    book.StatusWantToRead,
+			DateAdded: time.Now(),
+		})
+	}
+
+	return books, nil
+}
+
+// FetchTrending fetches trending/popular books
+func (c *OpenLibraryClient) FetchTrending(ctx context.Context, category string, limit int) ([]book.Book, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	// Valid categories: now, daily, weekly, monthly, yearly, forever
+	validCategories := map[string]bool{
+		"now": true, "daily": true, "weekly": true,
+		"monthly": true, "yearly": true, "forever": true,
+	}
+	if !validCategories[category] {
+		category = "weekly"
+	}
+
+	trendingURL := fmt.Sprintf("%s/trending/%s.json?limit=%d", c.baseURL, category, limit)
+	req, err := http.NewRequestWithContext(ctx, "GET", trendingURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch trending: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("OpenLibrary returned status %d", resp.StatusCode)
+	}
+
+	var result olTrendingResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode trending: %w", err)
+	}
+
+	books := make([]book.Book, 0, len(result.Works))
+	for _, work := range result.Works {
+		author := ""
+		if len(work.AuthorName) > 0 {
+			author = strings.Join(work.AuthorName, ", ")
+		}
+
+		books = append(books, book.Book{
+			Title:     work.Title,
+			Author:    author,
+			Status:    book.StatusWantToRead,
+			DateAdded: time.Now(),
+		})
+	}
+
+	return books, nil
+}
