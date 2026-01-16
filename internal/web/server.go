@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -58,6 +59,9 @@ func NewServer(bookService *book.Service, searchEngine *search.Engine) *Server {
 		"mul": func(a float32, b int) float32 {
 			return a * float32(b)
 		},
+		"join": func(s []string) string {
+			return strings.Join(s, ", ")
+		},
 	}
 
 	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html"))
@@ -87,6 +91,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/scrape", s.handleScrape)
 	s.mux.HandleFunc("/scrape/execute", s.handleScrapeExecute)
 	s.mux.HandleFunc("/add", s.handleAdd)
+	s.mux.HandleFunc("/edit/", s.handleEdit)
 	s.mux.HandleFunc("/delete/", s.handleDelete)
 }
 
@@ -350,6 +355,7 @@ func (s *Server) handleScrapeExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		fmt.Println(err)
 		data := struct {
 			Error string
 		}{Error: err.Error()}
@@ -433,6 +439,64 @@ func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.render(w, "add.html", nil)
+}
+
+func (s *Server) handleEdit(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/edit/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	ctx := r.Context()
+
+	if r.Method == http.MethodPost {
+		r.ParseForm()
+		b, err := s.bookService.Get(ctx, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		b.Title = r.FormValue("title")
+		b.Author = r.FormValue("author")
+		b.ISBN = r.FormValue("isbn")
+		b.Genre = r.FormValue("genre")
+		b.Description = r.FormValue("description")
+		b.CoverURL = r.FormValue("cover_url")
+		b.Notes = r.FormValue("notes")
+		b.Status = book.Status(r.FormValue("status"))
+
+		if rating := r.FormValue("rating"); rating != "" {
+			b.Rating, _ = strconv.Atoi(rating)
+		}
+
+		if tags := r.FormValue("tags"); tags != "" {
+			b.Tags = strings.Split(tags, ",")
+			for i := range b.Tags {
+				b.Tags[i] = strings.TrimSpace(b.Tags[i])
+			}
+		} else {
+			b.Tags = nil
+		}
+
+		if b.Status == book.StatusRead && b.DateRead.IsZero() {
+			b.DateRead = time.Now()
+		}
+
+		s.bookService.Update(ctx, b)
+		http.Redirect(w, r, "/books/"+idStr, http.StatusSeeOther)
+		return
+	}
+
+	b, err := s.bookService.Get(ctx, id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	s.render(w, "edit.html", b)
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
