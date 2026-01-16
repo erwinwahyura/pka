@@ -2,3 +2,6 @@
 /pka
 /pka-web
 *.exe
+DOMAIN_SETUP.md
+CICD_SETUP.md
+HETZNER_DEPLOYMENT.md
