@@ -1,0 +1,60 @@
+{{define "books.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PKA - Books</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>.line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-indigo-600 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="text-xl font-bold">PKA</a>
+                    <a href="/books" class="hover:text-indigo-200">Books</a>
+                    <a href="/search" class="hover:text-indigo-200">Search</a>
+                    <a href="/scrape" class="hover:text-indigo-200">Scrape</a>
+                    <a href="/add" class="hover:text-indigo-200">Add Book</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-gray-900">Books</h1>
+                <a href="/add" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">+ Add Book</a>
+            </div>
+            <div class="flex gap-2">
+                <a href="/books" class="px-4 py-2 rounded-lg {{if eq .Status ""}}bg-indigo-600 text-white{{else}}bg-gray-200 text-gray-700 hover:bg-gray-300{{end}}">All</a>
+                <a href="/books?status=want_to_read" class="px-4 py-2 rounded-lg {{if eq .Status "want_to_read"}}bg-yellow-500 text-white{{else}}bg-gray-200 text-gray-700 hover:bg-gray-300{{end}}">Want to Read</a>
+                <a href="/books?status=reading" class="px-4 py-2 rounded-lg {{if eq .Status "reading"}}bg-blue-500 text-white{{else}}bg-gray-200 text-gray-700 hover:bg-gray-300{{end}}">Reading</a>
+                <a href="/books?status=read" class="px-4 py-2 rounded-lg {{if eq .Status "read"}}bg-green-500 text-white{{else}}bg-gray-200 text-gray-700 hover:bg-gray-300{{end}}">Read</a>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {{range .Books}}
+                <div class="bg-white rounded-lg shadow hover:shadow-lg transition-shadow">
+                    <a href="/books/{{.ID}}" class="block p-6">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-semibold text-gray-900 line-clamp-2">{{.Title}}</h3>
+                            <span class="ml-2 px-2 py-1 rounded-full text-xs {{statusColor .Status}} whitespace-nowrap">{{.Status}}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">{{.Author}}</p>
+                        {{if .Genre}}<p class="text-xs text-gray-500 mb-2">{{.Genre}}</p>{{end}}
+                        {{if gt .Rating 0}}<div class="text-yellow-500">{{stars .Rating}}</div>{{end}}
+                        {{if .Description}}<p class="text-sm text-gray-500 mt-2 line-clamp-2">{{truncate .Description 100}}</p>{{end}}
+                    </a>
+                </div>
+                {{else}}
+                <div class="col-span-full text-center py-12 text-gray-500">No books found. <a href="/scrape" class="text-indigo-600 hover:underline">Scrape some books</a> to get started!</div>
+                {{end}}
+            </div>
+            <div class="text-center text-gray-500">Showing {{len .Books}} books</div>
+        </div>
+    </main>
+</body>
+</html>
+{{end}}

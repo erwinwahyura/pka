@@ -1,0 +1,88 @@
+{{define "dashboard.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PKA - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-indigo-600 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="text-xl font-bold">PKA</a>
+                    <a href="/books" class="hover:text-indigo-200">Books</a>
+                    <a href="/search" class="hover:text-indigo-200">Search</a>
+                    <a href="/scrape" class="hover:text-indigo-200">Scrape</a>
+                    <a href="/add" class="hover:text-indigo-200">Add Book</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-8">
+            <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-500">Total Books</div>
+                    <div class="text-3xl font-bold text-gray-900">{{.Total}}</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-yellow-600">Want to Read</div>
+                    <div class="text-3xl font-bold text-yellow-600">{{.WantToRead}}</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-blue-600">Reading</div>
+                    <div class="text-3xl font-bold text-blue-600">{{.Reading}}</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-green-600">Read</div>
+                    <div class="text-3xl font-bold text-green-600">{{.Read}}</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <a href="/scrape" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg p-4 text-center font-medium">
+                    Scrape New Books
+                </a>
+                <a href="/search" class="bg-purple-600 hover:bg-purple-700 text-white rounded-lg p-4 text-center font-medium">
+                    Semantic Search
+                </a>
+                <a href="/add" class="bg-green-600 hover:bg-green-700 text-white rounded-lg p-4 text-center font-medium">
+                    Add Book Manually
+                </a>
+            </div>
+
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-xl font-semibold text-gray-900">Recent Books</h2>
+                </div>
+                <div class="divide-y divide-gray-200">
+                    {{range .RecentBooks}}
+                    <a href="/books/{{.ID}}" class="block px-6 py-4 hover:bg-gray-50">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="font-medium text-gray-900">{{.Title}}</div>
+                                <div class="text-sm text-gray-500">{{.Author}}</div>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-sm {{statusColor .Status}}">
+                                {{.Status}}
+                            </span>
+                        </div>
+                    </a>
+                    {{else}}
+                    <div class="px-6 py-8 text-center text-gray-500">
+                        No books yet. <a href="/scrape" class="text-indigo-600 hover:underline">Scrape some books</a> to get started!
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
+{{end}}

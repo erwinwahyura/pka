@@ -1,0 +1,63 @@
+{{define "scrape.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PKA - Scrape</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-indigo-600 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="text-xl font-bold">PKA</a>
+                    <a href="/books" class="hover:text-indigo-200">Books</a>
+                    <a href="/search" class="hover:text-indigo-200">Search</a>
+                    <a href="/scrape" class="hover:text-indigo-200">Scrape</a>
+                    <a href="/add" class="hover:text-indigo-200">Add Book</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-6">
+            <h1 class="text-3xl font-bold text-gray-900">Scrape Books</h1>
+            <p class="text-gray-600">Discover and add books from OpenLibrary or Google Books.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">By Author</h2>
+                    <form method="POST" action="/scrape/execute" class="space-y-4">
+                        <input type="hidden" name="type" value="author">
+                        <div><label class="block text-sm font-medium mb-1">Author Name</label><input type="text" name="query" placeholder="e.g., Brandon Sanderson" required class="w-full border rounded-lg px-4 py-2"></div>
+                        <div><label class="block text-sm font-medium mb-1">Source</label><select name="source" class="w-full border rounded-lg px-4 py-2"><option value="openlibrary">OpenLibrary</option><option value="google">Google Books</option></select></div>
+                        <div><label class="block text-sm font-medium mb-1">Limit</label><input type="number" name="limit" value="20" min="1" max="100" class="w-full border rounded-lg px-4 py-2"></div>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg">Scrape by Author</button>
+                    </form>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">By Subject/Genre</h2>
+                    <form method="POST" action="/scrape/execute" class="space-y-4">
+                        <input type="hidden" name="type" value="subject">
+                        <div><label class="block text-sm font-medium mb-1">Subject/Genre</label><input type="text" name="query" placeholder="e.g., science fiction" required class="w-full border rounded-lg px-4 py-2"></div>
+                        <div><label class="block text-sm font-medium mb-1">Source</label><select name="source" class="w-full border rounded-lg px-4 py-2"><option value="openlibrary">OpenLibrary</option><option value="google">Google Books</option></select></div>
+                        <div><label class="block text-sm font-medium mb-1">Limit</label><input type="number" name="limit" value="20" min="1" max="100" class="w-full border rounded-lg px-4 py-2"></div>
+                        <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">Scrape by Subject</button>
+                    </form>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">Trending Books</h2>
+                    <form method="POST" action="/scrape/execute" class="space-y-4">
+                        <input type="hidden" name="type" value="trending">
+                        <div><label class="block text-sm font-medium mb-1">Period</label><select name="query" class="w-full border rounded-lg px-4 py-2"><option value="weekly">This Week</option><option value="monthly">This Month</option><option value="forever">All Time</option></select></div>
+                        <div><label class="block text-sm font-medium mb-1">Limit</label><input type="number" name="limit" value="20" min="1" max="100" class="w-full border rounded-lg px-4 py-2"></div>
+                        <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">Get Trending</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
+{{end}}

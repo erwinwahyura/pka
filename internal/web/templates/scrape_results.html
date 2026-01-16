@@ -1,0 +1,51 @@
+{{define "scrape_results.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PKA - Scrape Results</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-indigo-600 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="text-xl font-bold">PKA</a>
+                    <a href="/books" class="hover:text-indigo-200">Books</a>
+                    <a href="/search" class="hover:text-indigo-200">Search</a>
+                    <a href="/scrape" class="hover:text-indigo-200">Scrape</a>
+                    <a href="/add" class="hover:text-indigo-200">Add Book</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="max-w-2xl mx-auto space-y-6">
+            <a href="/scrape" class="text-indigo-600 hover:underline">&larr; Back to Scrape</a>
+            {{if .Error}}
+            <div class="bg-red-50 border border-red-200 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-red-800 mb-2">Error</h2>
+                <p class="text-red-600">{{.Error}}</p>
+            </div>
+            {{else}}
+            <div class="bg-white rounded-lg shadow p-8 text-center">
+                <div class="text-6xl mb-4">{{if gt .Added 0}}🎉{{else}}📚{{end}}</div>
+                <h1 class="text-2xl font-bold mb-2">Scrape Complete!</h1>
+                <div class="grid grid-cols-3 gap-4 my-8">
+                    <div class="bg-gray-50 rounded-lg p-4"><div class="text-3xl font-bold">{{.Total}}</div><div class="text-sm text-gray-500">Found</div></div>
+                    <div class="bg-green-50 rounded-lg p-4"><div class="text-3xl font-bold text-green-600">{{.Added}}</div><div class="text-sm text-green-600">Added</div></div>
+                    <div class="bg-yellow-50 rounded-lg p-4"><div class="text-3xl font-bold text-yellow-600">{{.Skipped}}</div><div class="text-sm text-yellow-600">Duplicates</div></div>
+                </div>
+                <div class="flex gap-4 justify-center">
+                    <a href="/books" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg">View Books</a>
+                    <a href="/scrape" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-2 rounded-lg">Scrape More</a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </main>
+</body>
+</html>
+{{end}}

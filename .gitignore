@@ -1,0 +1,4 @@
+# Binaries (at root level)
+/pka
+/pka-web
+*.exe
