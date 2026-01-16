@@ -3,22 +3,23 @@ package book
 import "time"
 
 type Book struct {
-	ID          int64     `json:"id"`
-	Title       string    `json:"title"`
-	Author      string    `json:"author"`
-	ISBN        string    `json:"isbn,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Genre       string    `json:"genre,omitempty"`
-	Tags        []string  `json:"tags,omitempty"`
-	CoverURL    string    `json:"cover_url,omitempty"`   // book cover image URL
-	PageCount   int       `json:"page_count,omitempty"`  // total pages
-	CurrentPage int       `json:"current_page,omitempty"` // current reading progress
-	Rating      int       `json:"rating,omitempty"`      // 1-5 stars
-	Status      Status    `json:"status"`                // want_to_read, reading, read
-	Notes       string    `json:"notes,omitempty"`       // personal notes
-	DateAdded   time.Time `json:"date_added"`
-	DateRead    time.Time `json:"date_read,omitempty"`
-	Embedding   []float32 `json:"-"`                     // semantic embedding vector
+	ID          int64        `json:"id"`
+	Title       string       `json:"title"`
+	Author      string       `json:"author"`
+	ISBN        string       `json:"isbn,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Genre       string       `json:"genre,omitempty"`
+	Tags        []string     `json:"tags,omitempty"`
+	CoverURL    string       `json:"cover_url,omitempty"`    // book cover image URL
+	PageCount   int          `json:"page_count,omitempty"`   // total pages
+	CurrentPage int          `json:"current_page,omitempty"` // current reading progress
+	Rating      int          `json:"rating,omitempty"`       // 1-5 stars
+	Status      Status       `json:"status"`                 // want_to_read, reading, read
+	Notes       string       `json:"notes,omitempty"`        // personal notes
+	DateAdded   time.Time    `json:"date_added"`
+	DateRead    time.Time    `json:"date_read,omitempty"`
+	Embedding   []float32    `json:"-"`                      // semantic embedding vector
+	Adaptations []Adaptation `json:"adaptations,omitempty"`  // media adaptations (movies, TV, etc)
 }
 
 // Progress returns reading progress as percentage (0-100)
@@ -31,6 +32,22 @@ func (b *Book) Progress() int {
 		return 100
 	}
 	return p
+}
+
+// HasAdaptations returns true if book has any adaptations
+func (b *Book) HasAdaptations() bool {
+	return len(b.Adaptations) > 0
+}
+
+// AdaptationsByType returns adaptations filtered by type
+func (b *Book) AdaptationsByType(t AdaptationType) []Adaptation {
+	var result []Adaptation
+	for _, a := range b.Adaptations {
+		if a.Type == t {
+			result = append(result, a)
+		}
+	}
+	return result
 }
 
 type Status string
@@ -56,4 +73,51 @@ func (s Status) IsValid() bool {
 type SearchResult struct {
 	Book       Book    `json:"book"`
 	Similarity float32 `json:"similarity"` // cosine similarity score
+}
+
+// Adaptation represents a media adaptation of a book (movie, TV show, etc)
+type Adaptation struct {
+	Type       AdaptationType `json:"type"`
+	Title      string         `json:"title"`        // title if different from book
+	Year       int            `json:"year"`         // release year
+	Rating     float64        `json:"rating"`       // TMDB vote_average (0-10 scale)
+	Popularity float64        `json:"popularity"`   // TMDB popularity score
+	TMDBID     int            `json:"tmdb_id"`      // TMDB ID for reference
+	PosterURL  string         `json:"poster_url"`   // TMDB poster image URL
+}
+
+type AdaptationType string
+
+const (
+	AdaptationMovie     AdaptationType = "movie"
+	AdaptationTVSeries  AdaptationType = "tv"
+	AdaptationAnime     AdaptationType = "anime"
+	AdaptationVideoGame AdaptationType = "game"
+)
+
+func (at AdaptationType) String() string {
+	return string(at)
+}
+
+func (at AdaptationType) IsValid() bool {
+	switch at {
+	case AdaptationMovie, AdaptationTVSeries, AdaptationAnime, AdaptationVideoGame:
+		return true
+	}
+	return false
+}
+
+// Display returns a human-friendly display name
+func (at AdaptationType) Display() string {
+	switch at {
+	case AdaptationMovie:
+		return "Movie"
+	case AdaptationTVSeries:
+		return "TV Series"
+	case AdaptationAnime:
+		return "Anime"
+	case AdaptationVideoGame:
+		return "Video Game"
+	}
+	return string(at)
 }

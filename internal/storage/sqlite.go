@@ -61,6 +61,7 @@ func (r *SQLiteRepository) migrate() error {
 	r.db.Exec("ALTER TABLE books ADD COLUMN cover_url TEXT")
 	r.db.Exec("ALTER TABLE books ADD COLUMN page_count INTEGER")
 	r.db.Exec("ALTER TABLE books ADD COLUMN current_page INTEGER")
+	r.db.Exec("ALTER TABLE books ADD COLUMN adaptations TEXT")
 	return nil
 }
 
@@ -70,11 +71,12 @@ func (r *SQLiteRepository) Close() error {
 
 func (r *SQLiteRepository) Create(ctx context.Context, b *book.Book) error {
 	tags, _ := json.Marshal(b.Tags)
+	adaptations, _ := json.Marshal(b.Adaptations)
 
 	result, err := r.db.ExecContext(ctx, `
-		INSERT INTO books (title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.PageCount, b.CurrentPage, b.Rating, b.Status, b.Notes, b.DateAdded, nullTime(b.DateRead))
+		INSERT INTO books (title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, adaptations)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.PageCount, b.CurrentPage, b.Rating, b.Status, b.Notes, b.DateAdded, nullTime(b.DateRead), string(adaptations))
 
 	if err != nil {
 		return fmt.Errorf("insert: %w", err)
@@ -91,7 +93,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, b *book.Book) error {
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (*book.Book, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding, adaptations
 		FROM books WHERE id = ?
 	`, id)
 
@@ -100,7 +102,7 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (*book.Book, e
 
 func (r *SQLiteRepository) GetAll(ctx context.Context) ([]book.Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding, adaptations
 		FROM books ORDER BY date_added DESC
 	`)
 	if err != nil {
@@ -113,7 +115,7 @@ func (r *SQLiteRepository) GetAll(ctx context.Context) ([]book.Book, error) {
 
 func (r *SQLiteRepository) GetByStatus(ctx context.Context, status book.Status) ([]book.Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding, adaptations
 		FROM books WHERE status = ? ORDER BY date_added DESC
 	`, status)
 	if err != nil {
@@ -126,13 +128,14 @@ func (r *SQLiteRepository) GetByStatus(ctx context.Context, status book.Status) 
 
 func (r *SQLiteRepository) Update(ctx context.Context, b *book.Book) error {
 	tags, _ := json.Marshal(b.Tags)
+	adaptations, _ := json.Marshal(b.Adaptations)
 
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE books SET
 			title = ?, author = ?, isbn = ?, description = ?, genre = ?,
-			tags = ?, cover_url = ?, page_count = ?, current_page = ?, rating = ?, status = ?, notes = ?, date_read = ?
+			tags = ?, cover_url = ?, page_count = ?, current_page = ?, rating = ?, status = ?, notes = ?, date_read = ?, adaptations = ?
 		WHERE id = ?
-	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.PageCount, b.CurrentPage, b.Rating, b.Status, b.Notes, nullTime(b.DateRead), b.ID)
+	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.PageCount, b.CurrentPage, b.Rating, b.Status, b.Notes, nullTime(b.DateRead), string(adaptations), b.ID)
 
 	return err
 }
@@ -154,7 +157,7 @@ func (r *SQLiteRepository) UpdateEmbedding(ctx context.Context, id int64, embedd
 
 func (r *SQLiteRepository) GetAllWithEmbeddings(ctx context.Context) ([]book.Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding, adaptations
 		FROM books WHERE embedding IS NOT NULL
 	`)
 	if err != nil {
@@ -171,7 +174,7 @@ func (r *SQLiteRepository) FindByISBN(ctx context.Context, isbn string) (*book.B
 	}
 
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding, adaptations
 		FROM books WHERE isbn = ? LIMIT 1
 	`, isbn)
 
@@ -192,7 +195,7 @@ func (r *SQLiteRepository) FindByTitleAuthor(ctx context.Context, title, author 
 
 	// Case-insensitive search using LOWER()
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding, adaptations
 		FROM books WHERE LOWER(title) = LOWER(?) AND LOWER(author) = LOWER(?) LIMIT 1
 	`, title, author)
 
@@ -213,6 +216,7 @@ type scanner interface {
 func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
 	var b book.Book
 	var tagsJSON string
+	var adaptationsJSON string
 	var coverURL sql.NullString
 	var pageCount, currentPage sql.NullInt64
 	var dateRead sql.NullTime
@@ -220,7 +224,7 @@ func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
 
 	err := s.Scan(
 		&b.ID, &b.Title, &b.Author, &b.ISBN, &b.Description, &b.Genre,
-		&tagsJSON, &coverURL, &pageCount, &currentPage, &b.Rating, &b.Status, &b.Notes, &b.DateAdded, &dateRead, &embeddingBlob,
+		&tagsJSON, &coverURL, &pageCount, &currentPage, &b.Rating, &b.Status, &b.Notes, &b.DateAdded, &dateRead, &embeddingBlob, &adaptationsJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -228,6 +232,9 @@ func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
 
 	if tagsJSON != "" {
 		json.Unmarshal([]byte(tagsJSON), &b.Tags)
+	}
+	if adaptationsJSON != "" {
+		json.Unmarshal([]byte(adaptationsJSON), &b.Adaptations)
 	}
 	if coverURL.Valid {
 		b.CoverURL = coverURL.String
