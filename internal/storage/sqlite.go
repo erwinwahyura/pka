@@ -216,7 +216,7 @@ type scanner interface {
 func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
 	var b book.Book
 	var tagsJSON string
-	var adaptationsJSON string
+	var adaptationsJSON sql.NullString
 	var coverURL sql.NullString
 	var pageCount, currentPage sql.NullInt64
 	var dateRead sql.NullTime
@@ -233,8 +233,8 @@ func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
 	if tagsJSON != "" {
 		json.Unmarshal([]byte(tagsJSON), &b.Tags)
 	}
-	if adaptationsJSON != "" {
-		json.Unmarshal([]byte(adaptationsJSON), &b.Adaptations)
+	if adaptationsJSON.Valid && adaptationsJSON.String != "" {
+		json.Unmarshal([]byte(adaptationsJSON.String), &b.Adaptations)
 	}
 	if coverURL.Valid {
 		b.CoverURL = coverURL.String

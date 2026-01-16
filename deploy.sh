@@ -38,6 +38,16 @@ cd "$APP_DIR" || {
     exit 1
 }
 
+# Check existing data before deployment
+echo -e "${YELLOW}📊 Checking existing data...${NC}"
+docker volume ls | grep pka || echo "No pka volumes found"
+if docker exec pka-web ls -lh /data/books.db 2>/dev/null; then
+    echo -e "${GREEN}✅ Database file exists${NC}"
+    docker exec pka-web ls -lh /data/books.db
+else
+    echo -e "${YELLOW}⚠️  No existing database found (first deployment?)${NC}"
+fi
+
 # Pull latest changes if using git
 if [ -d .git ]; then
     echo -e "${YELLOW}📥 Pulling latest changes...${NC}"
@@ -46,7 +56,7 @@ if [ -d .git ]; then
     echo -e "${GREEN}✓ Code updated${NC}"
 fi
 
-# Stop running containers
+# Stop running containers (preserves volumes)
 echo -e "${YELLOW}🛑 Stopping running containers...${NC}"
 docker-compose down
 
@@ -70,6 +80,16 @@ else
     echo -e "${RED}❌ Containers failed to start${NC}"
     docker-compose logs
     exit 1
+fi
+
+# Verify data persisted after deployment
+echo -e "${YELLOW}📊 Verifying data after deployment...${NC}"
+sleep 2
+if docker exec pka-web ls -lh /data/books.db 2>/dev/null; then
+    echo -e "${GREEN}✅ Database file exists and persisted${NC}"
+    docker exec pka-web ls -lh /data/books.db
+else
+    echo -e "${YELLOW}⚠️  Database file not found!${NC}"
 fi
 
 # Health check

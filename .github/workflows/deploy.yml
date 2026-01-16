@@ -57,11 +57,21 @@ jobs:
             # Navigate to app directory
             cd /opt/pka || exit 1
 
+            # Check volume and data before deployment
+            echo "📊 Checking existing data..."
+            docker volume ls | grep pka || echo "No pka volumes found"
+            if docker exec pka-web ls -lh /data/books.db 2>/dev/null; then
+              echo "✅ Database file exists"
+              docker exec pka-web ls -lh /data/books.db
+            else
+              echo "⚠️  No existing database found (first deployment?)"
+            fi
+
             # Pull latest changes
             git fetch origin
             git reset --hard origin/main
 
-            # Stop running containers
+            # Stop running containers (preserves volumes)
             docker-compose down
 
             # Remove old images to free space
@@ -78,6 +88,16 @@ jobs:
               echo "Deployment failed - containers not running"
               docker-compose logs
               exit 1
+            fi
+
+            # Verify data persisted after deployment
+            echo "📊 Verifying data after deployment..."
+            sleep 2
+            if docker exec pka-web ls -lh /data/books.db 2>/dev/null; then
+              echo "✅ Database file exists and persisted"
+              docker exec pka-web ls -lh /data/books.db
+            else
+              echo "⚠️  Database file not found!"
             fi
 
             echo "Deployment successful!"
