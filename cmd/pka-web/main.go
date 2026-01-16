@@ -10,6 +10,7 @@ import (
 
 	"github.com/erwar/pka/internal/book"
 	"github.com/erwar/pka/internal/embedding"
+	"github.com/erwar/pka/internal/scraper"
 	"github.com/erwar/pka/internal/search"
 	"github.com/erwar/pka/internal/storage"
 	"github.com/erwar/pka/internal/web"
@@ -45,8 +46,15 @@ func main() {
 	bookService := book.NewService(repo, embedder)
 	searchEngine := search.NewEngine(repo, embedder)
 
+	// Initialize TMDB client (optional - requires API key)
+	tmdbAPIKey := os.Getenv("TMDB_API_KEY")
+	tmdbClient := scraper.NewTMDBClient(tmdbAPIKey)
+	if tmdbAPIKey == "" {
+		log.Println("Warning: TMDB_API_KEY not set - adaptation search will be disabled")
+	}
+
 	// Create web server
-	server := web.NewServer(bookService, searchEngine)
+	server := web.NewServer(bookService, searchEngine, tmdbClient)
 
 	// Start server
 	addr := fmt.Sprintf(":%s", *port)

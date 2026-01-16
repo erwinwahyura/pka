@@ -25,11 +25,12 @@ var templateFS embed.FS
 type Server struct {
 	bookService  *book.Service
 	searchEngine *search.Engine
+	tmdbClient   *scraper.TMDBClient
 	templates    *template.Template
 	mux          *http.ServeMux
 }
 
-func NewServer(bookService *book.Service, searchEngine *search.Engine) *Server {
+func NewServer(bookService *book.Service, searchEngine *search.Engine, tmdbClient *scraper.TMDBClient) *Server {
 	// Parse templates with custom functions
 	funcMap := template.FuncMap{
 		"stars": func(n int) string {
@@ -69,6 +70,26 @@ func NewServer(bookService *book.Service, searchEngine *search.Engine) *Server {
 			i, _ := strconv.Atoi(s)
 			return i
 		},
+		"adaptationType": func(t book.AdaptationType) string {
+			return t.Display()
+		},
+		"adaptationColor": func(t book.AdaptationType) string {
+			switch t {
+			case book.AdaptationMovie:
+				return "bg-red-100 text-red-800"
+			case book.AdaptationTVSeries:
+				return "bg-blue-100 text-blue-800"
+			case book.AdaptationAnime:
+				return "bg-purple-100 text-purple-800"
+			case book.AdaptationVideoGame:
+				return "bg-green-100 text-green-800"
+			default:
+				return "bg-gray-100 text-gray-800"
+			}
+		},
+		"formatRating": func(r float64) string {
+			return fmt.Sprintf("%.1f", r)
+		},
 	}
 
 	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html"))
@@ -76,6 +97,7 @@ func NewServer(bookService *book.Service, searchEngine *search.Engine) *Server {
 	s := &Server{
 		bookService:  bookService,
 		searchEngine: searchEngine,
+		tmdbClient:   tmdbClient,
 		templates:    tmpl,
 		mux:          http.NewServeMux(),
 	}
@@ -103,6 +125,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/export", s.handleExport)
 	s.mux.HandleFunc("/import", s.handleImport)
 	s.mux.HandleFunc("/stats", s.handleStats)
+	s.mux.HandleFunc("/adaptations", s.handleAdaptations)
+	s.mux.HandleFunc("/adaptations/search", s.handleAdaptationsSearch)
+	s.mux.HandleFunc("/adaptations/add", s.handleAdaptationsAdd)
+	s.mux.HandleFunc("/adaptations/delete", s.handleAdaptationsDelete)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -785,6 +811,212 @@ func (s *Server) importCSV(ctx context.Context, r io.Reader) (imported, skipped 
 	}
 
 	return imported, skipped, nil
+}
+
+// handleAdaptations shows all books with adaptations
+func (s *Server) handleAdaptations(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	books, err := s.bookService.List(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Filter books with adaptations
+	var booksWithAdaptations []book.Book
+	for _, b := range books {
+		if b.HasAdaptations() {
+			booksWithAdaptations = append(booksWithAdaptations, b)
+		}
+	}
+
+	// Count adaptations by type
+	stats := struct {
+		TotalBooks       int
+		TotalAdaptations int
+		MovieCount       int
+		TVCount          int
+		AnimeCount       int
+		GameCount        int
+		Books            []book.Book
+	}{
+		TotalBooks: len(booksWithAdaptations),
+		Books:      booksWithAdaptations,
+	}
+
+	for _, b := range booksWithAdaptations {
+		stats.TotalAdaptations += len(b.Adaptations)
+		for _, a := range b.Adaptations {
+			switch a.Type {
+			case book.AdaptationMovie:
+				stats.MovieCount++
+			case book.AdaptationTVSeries:
+				stats.TVCount++
+			case book.AdaptationAnime:
+				stats.AnimeCount++
+			case book.AdaptationVideoGame:
+				stats.GameCount++
+			}
+		}
+	}
+
+	s.render(w, "adaptations.html", stats)
+}
+
+// handleAdaptationsSearch searches TMDB for adaptations
+func (s *Server) handleAdaptationsSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.ParseForm()
+	bookIDStr := r.FormValue("book_id")
+	bookID, err := strconv.ParseInt(bookIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid book ID", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	b, err := s.bookService.Get(ctx, bookID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Search TMDB
+	if s.tmdbClient == nil {
+		http.Error(w, "TMDB API not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	adaptations, err := s.tmdbClient.SearchAdaptations(ctx, b.Title, b.Author)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("TMDB search failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return as JSON for AJAX handling
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"book":        b,
+		"adaptations": adaptations,
+	})
+}
+
+// handleAdaptationsAdd adds adaptation(s) to a book
+func (s *Server) handleAdaptationsAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.ParseForm()
+	bookIDStr := r.FormValue("book_id")
+	bookID, err := strconv.ParseInt(bookIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid book ID", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	b, err := s.bookService.Get(ctx, bookID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Parse adaptation data
+	adaptation := book.Adaptation{
+		Type:  book.AdaptationType(r.FormValue("type")),
+		Title: r.FormValue("title"),
+	}
+
+	if yearStr := r.FormValue("year"); yearStr != "" {
+		adaptation.Year, _ = strconv.Atoi(yearStr)
+	}
+	if ratingStr := r.FormValue("rating"); ratingStr != "" {
+		adaptation.Rating, _ = strconv.ParseFloat(ratingStr, 64)
+	}
+	if popularityStr := r.FormValue("popularity"); popularityStr != "" {
+		adaptation.Popularity, _ = strconv.ParseFloat(popularityStr, 64)
+	}
+	if tmdbIDStr := r.FormValue("tmdb_id"); tmdbIDStr != "" {
+		adaptation.TMDBID, _ = strconv.Atoi(tmdbIDStr)
+	}
+	adaptation.PosterURL = r.FormValue("poster_url")
+
+	// Validate
+	if !adaptation.Type.IsValid() {
+		http.Error(w, "Invalid adaptation type", http.StatusBadRequest)
+		return
+	}
+	if adaptation.Title == "" {
+		adaptation.Title = b.Title // Use book title if not specified
+	}
+
+	// Add to book's adaptations
+	b.Adaptations = append(b.Adaptations, adaptation)
+
+	// Update book
+	if err := s.bookService.Update(ctx, b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect back to book detail or adaptations page
+	redirectURL := r.FormValue("redirect")
+	if redirectURL == "" {
+		redirectURL = fmt.Sprintf("/books/%d", bookID)
+	}
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+// handleAdaptationsDelete removes an adaptation from a book
+func (s *Server) handleAdaptationsDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.ParseForm()
+	bookIDStr := r.FormValue("book_id")
+	bookID, err := strconv.ParseInt(bookIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid book ID", http.StatusBadRequest)
+		return
+	}
+
+	indexStr := r.FormValue("index")
+	index, err := strconv.Atoi(indexStr)
+	if err != nil {
+		http.Error(w, "Invalid index", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	b, err := s.bookService.Get(ctx, bookID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Remove adaptation at index
+	if index < 0 || index >= len(b.Adaptations) {
+		http.Error(w, "Index out of range", http.StatusBadRequest)
+		return
+	}
+
+	b.Adaptations = append(b.Adaptations[:index], b.Adaptations[index+1:]...)
+
+	// Update book
+	if err := s.bookService.Update(ctx, b); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/books/%d", bookID), http.StatusSeeOther)
 }
 
 func (s *Server) render(w http.ResponseWriter, name string, data any) {
