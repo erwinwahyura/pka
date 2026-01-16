@@ -57,8 +57,10 @@ func (r *SQLiteRepository) migrate() error {
 		return err
 	}
 
-	// Add cover_url column if it doesn't exist (for existing databases)
+	// Add columns if they don't exist (for existing databases)
 	r.db.Exec("ALTER TABLE books ADD COLUMN cover_url TEXT")
+	r.db.Exec("ALTER TABLE books ADD COLUMN page_count INTEGER")
+	r.db.Exec("ALTER TABLE books ADD COLUMN current_page INTEGER")
 	return nil
 }
 
@@ -70,9 +72,9 @@ func (r *SQLiteRepository) Create(ctx context.Context, b *book.Book) error {
 	tags, _ := json.Marshal(b.Tags)
 
 	result, err := r.db.ExecContext(ctx, `
-		INSERT INTO books (title, author, isbn, description, genre, tags, cover_url, rating, status, notes, date_added, date_read)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.Rating, b.Status, b.Notes, b.DateAdded, nullTime(b.DateRead))
+		INSERT INTO books (title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.PageCount, b.CurrentPage, b.Rating, b.Status, b.Notes, b.DateAdded, nullTime(b.DateRead))
 
 	if err != nil {
 		return fmt.Errorf("insert: %w", err)
@@ -89,7 +91,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, b *book.Book) error {
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (*book.Book, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
 		FROM books WHERE id = ?
 	`, id)
 
@@ -98,7 +100,7 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (*book.Book, e
 
 func (r *SQLiteRepository) GetAll(ctx context.Context) ([]book.Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
 		FROM books ORDER BY date_added DESC
 	`)
 	if err != nil {
@@ -111,7 +113,7 @@ func (r *SQLiteRepository) GetAll(ctx context.Context) ([]book.Book, error) {
 
 func (r *SQLiteRepository) GetByStatus(ctx context.Context, status book.Status) ([]book.Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
 		FROM books WHERE status = ? ORDER BY date_added DESC
 	`, status)
 	if err != nil {
@@ -128,9 +130,9 @@ func (r *SQLiteRepository) Update(ctx context.Context, b *book.Book) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE books SET
 			title = ?, author = ?, isbn = ?, description = ?, genre = ?,
-			tags = ?, cover_url = ?, rating = ?, status = ?, notes = ?, date_read = ?
+			tags = ?, cover_url = ?, page_count = ?, current_page = ?, rating = ?, status = ?, notes = ?, date_read = ?
 		WHERE id = ?
-	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.Rating, b.Status, b.Notes, nullTime(b.DateRead), b.ID)
+	`, b.Title, b.Author, b.ISBN, b.Description, b.Genre, string(tags), b.CoverURL, b.PageCount, b.CurrentPage, b.Rating, b.Status, b.Notes, nullTime(b.DateRead), b.ID)
 
 	return err
 }
@@ -152,7 +154,7 @@ func (r *SQLiteRepository) UpdateEmbedding(ctx context.Context, id int64, embedd
 
 func (r *SQLiteRepository) GetAllWithEmbeddings(ctx context.Context) ([]book.Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
 		FROM books WHERE embedding IS NOT NULL
 	`)
 	if err != nil {
@@ -169,7 +171,7 @@ func (r *SQLiteRepository) FindByISBN(ctx context.Context, isbn string) (*book.B
 	}
 
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
 		FROM books WHERE isbn = ? LIMIT 1
 	`, isbn)
 
@@ -190,7 +192,7 @@ func (r *SQLiteRepository) FindByTitleAuthor(ctx context.Context, title, author 
 
 	// Case-insensitive search using LOWER()
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, title, author, isbn, description, genre, tags, cover_url, rating, status, notes, date_added, date_read, embedding
+		SELECT id, title, author, isbn, description, genre, tags, cover_url, page_count, current_page, rating, status, notes, date_added, date_read, embedding
 		FROM books WHERE LOWER(title) = LOWER(?) AND LOWER(author) = LOWER(?) LIMIT 1
 	`, title, author)
 
@@ -212,12 +214,13 @@ func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
 	var b book.Book
 	var tagsJSON string
 	var coverURL sql.NullString
+	var pageCount, currentPage sql.NullInt64
 	var dateRead sql.NullTime
 	var embeddingBlob []byte
 
 	err := s.Scan(
 		&b.ID, &b.Title, &b.Author, &b.ISBN, &b.Description, &b.Genre,
-		&tagsJSON, &coverURL, &b.Rating, &b.Status, &b.Notes, &b.DateAdded, &dateRead, &embeddingBlob,
+		&tagsJSON, &coverURL, &pageCount, &currentPage, &b.Rating, &b.Status, &b.Notes, &b.DateAdded, &dateRead, &embeddingBlob,
 	)
 	if err != nil {
 		return nil, err
@@ -228,6 +231,12 @@ func (r *SQLiteRepository) scanBook(s scanner) (*book.Book, error) {
 	}
 	if coverURL.Valid {
 		b.CoverURL = coverURL.String
+	}
+	if pageCount.Valid {
+		b.PageCount = int(pageCount.Int64)
+	}
+	if currentPage.Valid {
+		b.CurrentPage = int(currentPage.Int64)
 	}
 	if dateRead.Valid {
 		b.DateRead = dateRead.Time

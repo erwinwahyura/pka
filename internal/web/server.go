@@ -203,9 +203,10 @@ func (s *Server) handleBookDetail(w http.ResponseWriter, r *http.Request) {
 		if rating := r.FormValue("rating"); rating != "" {
 			b.Rating, _ = strconv.Atoi(rating)
 		}
-		if notes := r.FormValue("notes"); notes != "" {
-			b.Notes = notes
+		if currentPage := r.FormValue("current_page"); currentPage != "" {
+			b.CurrentPage, _ = strconv.Atoi(currentPage)
 		}
+		b.Notes = r.FormValue("notes")
 
 		s.bookService.Update(ctx, b)
 		http.Redirect(w, r, "/books/"+idStr, http.StatusSeeOther)
@@ -480,6 +481,12 @@ func (s *Server) handleEdit(w http.ResponseWriter, r *http.Request) {
 
 		if rating := r.FormValue("rating"); rating != "" {
 			b.Rating, _ = strconv.Atoi(rating)
+		}
+		if pageCount := r.FormValue("page_count"); pageCount != "" {
+			b.PageCount, _ = strconv.Atoi(pageCount)
+		}
+		if currentPage := r.FormValue("current_page"); currentPage != "" {
+			b.CurrentPage, _ = strconv.Atoi(currentPage)
 		}
 
 		if tags := r.FormValue("tags"); tags != "" {

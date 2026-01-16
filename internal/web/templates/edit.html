@@ -53,6 +53,14 @@
                             <label class="block text-sm font-medium mb-1">Cover URL</label>
                             <input type="text" name="cover_url" value="{{.CoverURL}}" class="w-full border rounded-lg px-4 py-2" placeholder="https://...">
                         </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Total Pages</label>
+                            <input type="number" name="page_count" value="{{if gt .PageCount 0}}{{.PageCount}}{{end}}" class="w-full border rounded-lg px-4 py-2" min="0">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Current Page</label>
+                            <input type="number" name="current_page" value="{{if gt .CurrentPage 0}}{{.CurrentPage}}{{end}}" class="w-full border rounded-lg px-4 py-2" min="0">
+                        </div>
                         <div class="col-span-2">
                             <label class="block text-sm font-medium mb-1">Tags (comma-separated)</label>
                             <input type="text" name="tags" value="{{join .Tags}}" class="w-full border rounded-lg px-4 py-2" placeholder="sci-fi, space, adventure">

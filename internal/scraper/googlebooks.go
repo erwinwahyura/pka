@@ -230,6 +230,7 @@ func (c *GoogleBooksClient) itemsToBooks(items []gbItem) []book.Book {
 			Genre:       genre,
 			Tags:        tags,
 			CoverURL:    coverURL,
+			PageCount:   vi.PageCount,
 			Status:      book.StatusWantToRead,
 			DateAdded:   time.Now(),
 		})
