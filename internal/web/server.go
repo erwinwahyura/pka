@@ -82,6 +82,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/books", s.handleBooks)
 	s.mux.HandleFunc("/books/", s.handleBookDetail)
 	s.mux.HandleFunc("/search", s.handleSearch)
+	s.mux.HandleFunc("/discover", s.handleDiscover)
+	s.mux.HandleFunc("/discover/add", s.handleDiscoverAdd)
 	s.mux.HandleFunc("/scrape", s.handleScrape)
 	s.mux.HandleFunc("/scrape/execute", s.handleScrapeExecute)
 	s.mux.HandleFunc("/add", s.handleAdd)
@@ -224,6 +226,80 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.render(w, "search.html", data)
+}
+
+func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	source := r.URL.Query().Get("source")
+	if source == "" {
+		source = "openlibrary"
+	}
+
+	data := struct {
+		Query   string
+		Source  string
+		Results []book.Book
+		Error   string
+	}{
+		Query:  query,
+		Source: source,
+	}
+
+	if query != "" {
+		ctx := r.Context()
+		var books []book.Book
+		var err error
+
+		if source == "google" {
+			client := scraper.NewGoogleBooksClient("")
+			books, err = client.Search(ctx, query, 20)
+		} else {
+			client := scraper.NewOpenLibraryClient()
+			books, err = client.Search(ctx, query, 20)
+		}
+
+		if err != nil {
+			data.Error = err.Error()
+		} else {
+			// Mark books that are already in our library
+			for i := range books {
+				if s.bookService.IsDuplicate(ctx, &books[i]) {
+					books[i].ID = -1 // Mark as already in library
+				}
+			}
+			data.Results = books
+		}
+	}
+
+	s.render(w, "discover.html", data)
+}
+
+func (s *Server) handleDiscoverAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/discover", http.StatusSeeOther)
+		return
+	}
+
+	r.ParseForm()
+	b := &book.Book{
+		Title:       r.FormValue("title"),
+		Author:      r.FormValue("author"),
+		ISBN:        r.FormValue("isbn"),
+		Genre:       r.FormValue("genre"),
+		Description: r.FormValue("description"),
+		Status:      book.StatusWantToRead,
+		DateAdded:   time.Now(),
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	if err := s.bookService.Add(ctx, b); err != nil {
+		http.Redirect(w, r, "/discover?q="+r.FormValue("query")+"&error="+err.Error(), http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/books/"+strconv.FormatInt(b.ID, 10), http.StatusSeeOther)
 }
 
 func (s *Server) handleScrape(w http.ResponseWriter, r *http.Request) {
