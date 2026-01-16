@@ -392,6 +392,7 @@ func (s *Server) handleScrapeExecute(w http.ResponseWriter, r *http.Request) {
 		Added   int
 		Skipped int
 		Total   int
+		Error   string
 	}{
 		Query:   query,
 		Type:    scrapeType,

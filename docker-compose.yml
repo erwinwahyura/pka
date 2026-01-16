@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  pka-web:
+    build: .
+    container_name: pka-web
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DB_PATH=/data/books.db
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=nomic-embed-text
+    volumes:
+      - pka-data:/data
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    networks:
+      - pka-network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pka-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - pka-network
+    # NOTE: This requires at least 2GB RAM
+    # For GPU support, uncomment below:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  pka-data:
+    driver: local
+  ollama-data:
+    driver: local
+
+networks:
+  pka-network:
+    driver: bridge
