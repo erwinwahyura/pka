@@ -1,0 +1,145 @@
+{{define "stats.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PKA - Statistics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-indigo-600 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="text-xl font-bold">PKA</a>
+                    <a href="/books" class="hover:text-indigo-200">Books</a>
+                    <a href="/search" class="hover:text-indigo-200">Search</a>
+                    <a href="/discover" class="hover:text-indigo-200">Discover</a>
+                    <a href="/stats" class="hover:text-indigo-200">Stats</a>
+                    <a href="/add" class="hover:text-indigo-200">Add Book</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="space-y-6">
+            <h1 class="text-3xl font-bold text-gray-900">Library Statistics</h1>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white rounded-lg shadow p-6 text-center">
+                    <div class="text-4xl font-bold text-gray-900">{{.Total}}</div>
+                    <div class="text-sm text-gray-500">Total Books</div>
+                </div>
+                <div class="bg-yellow-50 rounded-lg shadow p-6 text-center">
+                    <div class="text-4xl font-bold text-yellow-600">{{.WantToRead}}</div>
+                    <div class="text-sm text-yellow-600">Want to Read</div>
+                </div>
+                <div class="bg-blue-50 rounded-lg shadow p-6 text-center">
+                    <div class="text-4xl font-bold text-blue-600">{{.Reading}}</div>
+                    <div class="text-sm text-blue-600">Reading</div>
+                </div>
+                <div class="bg-green-50 rounded-lg shadow p-6 text-center">
+                    <div class="text-4xl font-bold text-green-600">{{.Read}}</div>
+                    <div class="text-sm text-green-600">Read</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">Rating Summary</h2>
+                    {{if gt .RatedBooks 0}}
+                    <div class="text-center mb-4">
+                        <div class="text-5xl font-bold text-indigo-600">{{printf "%.1f" .AvgRating}}</div>
+                        <div class="text-yellow-500 text-2xl">{{stars (printf "%.0f" .AvgRating | atoi)}}</div>
+                        <div class="text-sm text-gray-500">Average rating from {{.RatedBooks}} books</div>
+                    </div>
+                    {{else}}
+                    <p class="text-gray-500 text-center">No rated books yet</p>
+                    {{end}}
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">Top Genres</h2>
+                    {{if .GenreCounts}}
+                    <div class="space-y-2">
+                        {{range $genre, $count := .GenreCounts}}
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-700">{{$genre}}</span>
+                            <span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-sm">{{$count}}</span>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <p class="text-gray-500 text-center">No genres recorded</p>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">Top Rated Books</h2>
+                    {{if .TopRated}}
+                    <div class="space-y-3">
+                        {{range .TopRated}}
+                        <a href="/books/{{.ID}}" class="flex items-center gap-3 hover:bg-gray-50 p-2 rounded">
+                            {{if .CoverURL}}
+                            <img src="{{.CoverURL}}" class="w-10 h-14 object-cover rounded">
+                            {{else}}
+                            <div class="w-10 h-14 bg-gray-200 rounded flex items-center justify-center text-gray-400">📚</div>
+                            {{end}}
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-gray-900 truncate">{{.Title}}</div>
+                                <div class="text-sm text-gray-500">{{.Author}}</div>
+                            </div>
+                            <div class="text-yellow-500">{{stars .Rating}}</div>
+                        </a>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <p class="text-gray-500 text-center">No highly rated books yet</p>
+                    {{end}}
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4">Recently Read</h2>
+                    {{if .RecentlyRead}}
+                    <div class="space-y-3">
+                        {{range .RecentlyRead}}
+                        <a href="/books/{{.ID}}" class="flex items-center gap-3 hover:bg-gray-50 p-2 rounded">
+                            {{if .CoverURL}}
+                            <img src="{{.CoverURL}}" class="w-10 h-14 object-cover rounded">
+                            {{else}}
+                            <div class="w-10 h-14 bg-gray-200 rounded flex items-center justify-center text-gray-400">📚</div>
+                            {{end}}
+                            <div class="flex-1 min-w-0">
+                                <div class="font-medium text-gray-900 truncate">{{.Title}}</div>
+                                <div class="text-sm text-gray-500">{{formatDate .DateRead}}</div>
+                            </div>
+                        </a>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <p class="text-gray-500 text-center">No completed books yet</p>
+                    {{end}}
+                </div>
+            </div>
+
+            {{if .ReadByMonth}}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Reading History</h2>
+                <div class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
+                    {{range $month, $count := .ReadByMonth}}
+                    <div class="bg-indigo-100 rounded p-2 text-center">
+                        <div class="text-lg font-bold text-indigo-600">{{$count}}</div>
+                        <div class="text-xs text-gray-500">{{$month}}</div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </main>
+</body>
+</html>
+{{end}}

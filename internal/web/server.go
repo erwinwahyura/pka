@@ -65,6 +65,10 @@ func NewServer(bookService *book.Service, searchEngine *search.Engine) *Server {
 		"join": func(s []string) string {
 			return strings.Join(s, ", ")
 		},
+		"atoi": func(s string) int {
+			i, _ := strconv.Atoi(s)
+			return i
+		},
 	}
 
 	tmpl := template.Must(template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html"))
@@ -98,6 +102,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/delete/", s.handleDelete)
 	s.mux.HandleFunc("/export", s.handleExport)
 	s.mux.HandleFunc("/import", s.handleImport)
+	s.mux.HandleFunc("/stats", s.handleStats)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -636,6 +641,84 @@ func (s *Server) importJSON(ctx context.Context, r io.Reader) (imported, skipped
 	}
 
 	return imported, skipped, nil
+}
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	books, err := s.bookService.List(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	stats := struct {
+		Total        int
+		WantToRead   int
+		Reading      int
+		Read         int
+		AvgRating    float64
+		RatedBooks   int
+		GenreCounts  map[string]int
+		TopRated     []book.Book
+		RecentlyRead []book.Book
+		ReadByMonth  map[string]int
+	}{
+		GenreCounts: make(map[string]int),
+		ReadByMonth: make(map[string]int),
+	}
+
+	var totalRating int
+
+	for _, b := range books {
+		stats.Total++
+
+		switch b.Status {
+		case book.StatusWantToRead:
+			stats.WantToRead++
+		case book.StatusReading:
+			stats.Reading++
+		case book.StatusRead:
+			stats.Read++
+			if !b.DateRead.IsZero() {
+				monthKey := b.DateRead.Format("2006-01")
+				stats.ReadByMonth[monthKey]++
+			}
+		}
+
+		if b.Rating > 0 {
+			totalRating += b.Rating
+			stats.RatedBooks++
+		}
+
+		if b.Genre != "" {
+			stats.GenreCounts[b.Genre]++
+		}
+	}
+
+	if stats.RatedBooks > 0 {
+		stats.AvgRating = float64(totalRating) / float64(stats.RatedBooks)
+	}
+
+	// Get top rated books (rating 4 or 5)
+	for _, b := range books {
+		if b.Rating >= 4 {
+			stats.TopRated = append(stats.TopRated, b)
+			if len(stats.TopRated) >= 5 {
+				break
+			}
+		}
+	}
+
+	// Get recently read books
+	for _, b := range books {
+		if b.Status == book.StatusRead && !b.DateRead.IsZero() {
+			stats.RecentlyRead = append(stats.RecentlyRead, b)
+			if len(stats.RecentlyRead) >= 5 {
+				break
+			}
+		}
+	}
+
+	s.render(w, "stats.html", stats)
 }
 
 func (s *Server) importCSV(ctx context.Context, r io.Reader) (imported, skipped int, err error) {
