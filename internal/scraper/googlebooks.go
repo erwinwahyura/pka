@@ -39,18 +39,18 @@ type gbItem struct {
 }
 
 type gbVolumeInfo struct {
-	Title               string        `json:"title"`
-	Authors             []string      `json:"authors"`
-	Publisher           string        `json:"publisher"`
-	PublishedDate       string        `json:"publishedDate"`
-	Description         string        `json:"description"`
-	IndustryIdentifiers []gbISBN      `json:"industryIdentifiers"`
-	Categories          []string      `json:"categories"`
-	AverageRating       float64       `json:"averageRating"`
-	RatingsCount        int           `json:"ratingsCount"`
-	PageCount           int           `json:"pageCount"`
-	Language            string        `json:"language"`
-	ImageLinks          gbImageLinks  `json:"imageLinks"`
+	Title               string       `json:"title"`
+	Authors             []string     `json:"authors"`
+	Publisher           string       `json:"publisher"`
+	PublishedDate       string       `json:"publishedDate"`
+	Description         string       `json:"description"`
+	IndustryIdentifiers []gbISBN     `json:"industryIdentifiers"`
+	Categories          []string     `json:"categories"`
+	AverageRating       float64      `json:"averageRating"`
+	RatingsCount        int          `json:"ratingsCount"`
+	PageCount           int          `json:"pageCount"`
+	Language            string       `json:"language"`
+	ImageLinks          gbImageLinks `json:"imageLinks"`
 }
 
 type gbImageLinks struct {
@@ -72,7 +72,7 @@ func (c *GoogleBooksClient) Search(ctx context.Context, query string, limit int)
 		limit = 40 // Google Books API max
 	}
 
-	searchURL := fmt.Sprintf("%s/volumes?q=%s&maxResults=%d&printType=books&langRestrict=en",
+	searchURL := fmt.Sprintf("%s/volumes?q=%s&maxResults=%d&printType=books&langRestrict=en&orderBy=relevance&country=US",
 		c.baseURL, url.QueryEscape(query), limit)
 
 	if c.apiKey != "" {

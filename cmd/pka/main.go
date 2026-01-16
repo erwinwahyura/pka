@@ -21,8 +21,8 @@ import (
 )
 
 var (
-	dbPath     string
-	ollamaURL  string
+	dbPath      string
+	ollamaURL   string
 	ollamaModel string
 )
 
@@ -30,7 +30,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "pka",
 		Short: "Personal Knowledge Assistant - Your semantic book library",
-		Long:  `PKA helps you manage your book collection with semantic search capabilities.
+		Long: `PKA helps you manage your book collection with semantic search capabilities.
 Search by vibes ("dark thriller with plot twists"), track reading status, and find similar books.`,
 	}
 
@@ -203,7 +203,7 @@ func searchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search [query]",
 		Short: "Semantic search your book collection",
-		Long:  `Search books by meaning, not just keywords. Examples:
+		Long: `Search books by meaning, not just keywords. Examples:
   pka search "dark thriller with unexpected twist"
   pka search "cozy feel-good story"
   pka search "books about overcoming adversity"`,
