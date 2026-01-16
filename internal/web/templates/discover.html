@@ -42,13 +42,17 @@
                 <div class="divide-y">
                     {{range .Results}}
                     <div class="px-6 py-4">
-                        <div class="flex justify-between items-start gap-4">
-                            <div class="flex-1">
+                        <div class="flex gap-4">
+                            {{if .CoverURL}}
+                            <img src="{{.CoverURL}}" alt="{{.Title}}" class="w-16 h-24 object-cover rounded shadow-sm flex-shrink-0">
+                            {{else}}
+                            <div class="w-16 h-24 bg-gray-200 rounded flex items-center justify-center flex-shrink-0"><span class="text-gray-400 text-xl">📚</span></div>
+                            {{end}}
+                            <div class="flex-1 min-w-0">
                                 <div class="font-medium text-gray-900 text-lg">{{.Title}}</div>
                                 <div class="text-sm text-gray-600">{{.Author}}</div>
                                 {{if .Genre}}<div class="text-xs text-indigo-600 mt-1">{{.Genre}}</div>{{end}}
-                                {{if .Description}}<p class="text-sm text-gray-500 mt-2">{{truncate .Description 300}}</p>{{end}}
-                                {{if .ISBN}}<div class="text-xs text-gray-400 mt-1">ISBN: {{.ISBN}}</div>{{end}}
+                                {{if .Description}}<p class="text-sm text-gray-500 mt-2 line-clamp-2">{{truncate .Description 200}}</p>{{end}}
                             </div>
                             <div class="flex-shrink-0">
                                 {{if eq .ID -1}}
@@ -60,6 +64,7 @@
                                     <input type="hidden" name="isbn" value="{{.ISBN}}">
                                     <input type="hidden" name="genre" value="{{.Genre}}">
                                     <input type="hidden" name="description" value="{{.Description}}">
+                                    <input type="hidden" name="cover_url" value="{{.CoverURL}}">
                                     <input type="hidden" name="query" value="{{$.Query}}">
                                     <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm">+ Add</button>
                                 </form>

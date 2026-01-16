@@ -38,15 +38,21 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {{range .Books}}
                 <div class="bg-white rounded-lg shadow hover:shadow-lg transition-shadow">
-                    <a href="/books/{{.ID}}" class="block p-6">
-                        <div class="flex justify-between items-start mb-2">
-                            <h3 class="font-semibold text-gray-900 line-clamp-2">{{.Title}}</h3>
-                            <span class="ml-2 px-2 py-1 rounded-full text-xs {{statusColor .Status}} whitespace-nowrap">{{.Status}}</span>
+                    <a href="/books/{{.ID}}" class="flex p-4 gap-4">
+                        {{if .CoverURL}}
+                        <img src="{{.CoverURL}}" alt="{{.Title}}" class="w-16 h-24 object-cover rounded shadow-sm flex-shrink-0">
+                        {{else}}
+                        <div class="w-16 h-24 bg-gray-200 rounded flex items-center justify-center flex-shrink-0"><span class="text-gray-400 text-2xl">📚</span></div>
+                        {{end}}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-start mb-1">
+                                <h3 class="font-semibold text-gray-900 line-clamp-2">{{.Title}}</h3>
+                                <span class="ml-2 px-2 py-1 rounded-full text-xs {{statusColor .Status}} whitespace-nowrap">{{.Status}}</span>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-1">{{.Author}}</p>
+                            {{if .Genre}}<p class="text-xs text-gray-500 mb-1">{{.Genre}}</p>{{end}}
+                            {{if gt .Rating 0}}<div class="text-yellow-500 text-sm">{{stars .Rating}}</div>{{end}}
                         </div>
-                        <p class="text-sm text-gray-600 mb-2">{{.Author}}</p>
-                        {{if .Genre}}<p class="text-xs text-gray-500 mb-2">{{.Genre}}</p>{{end}}
-                        {{if gt .Rating 0}}<div class="text-yellow-500">{{stars .Rating}}</div>{{end}}
-                        {{if .Description}}<p class="text-sm text-gray-500 mt-2 line-clamp-2">{{truncate .Description 100}}</p>{{end}}
                     </a>
                 </div>
                 {{else}}

@@ -199,11 +199,17 @@ func (c *OpenLibraryClient) Search(ctx context.Context, query string, limit int)
 			tags = append(tags, s)
 		}
 
+		coverURL := ""
+		if doc.CoverI > 0 {
+			coverURL = fmt.Sprintf("https://covers.openlibrary.org/b/id/%d-M.jpg", doc.CoverI)
+		}
+
 		books = append(books, book.Book{
 			Title:     doc.Title,
 			Author:    author,
 			ISBN:      isbn,
 			Tags:      tags,
+			CoverURL:  coverURL,
 			Status:    book.StatusWantToRead,
 			DateAdded: time.Now(),
 		})

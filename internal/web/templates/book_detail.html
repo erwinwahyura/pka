@@ -26,14 +26,23 @@
         <div class="max-w-3xl mx-auto space-y-6">
             <a href="/books" class="text-indigo-600 hover:underline">&larr; Back to Books</a>
             <div class="bg-white rounded-lg shadow p-8">
-                <div class="flex justify-between items-start mb-6">
-                    <div>
-                        <h1 class="text-3xl font-bold text-gray-900">{{.Title}}</h1>
-                        <p class="text-xl text-gray-600 mt-1">{{.Author}}</p>
+                <div class="flex gap-6 mb-6">
+                    {{if .CoverURL}}
+                    <img src="{{.CoverURL}}" alt="{{.Title}}" class="w-32 h-48 object-cover rounded-lg shadow-md flex-shrink-0">
+                    {{else}}
+                    <div class="w-32 h-48 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0"><span class="text-gray-400 text-4xl">📚</span></div>
+                    {{end}}
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h1 class="text-3xl font-bold text-gray-900">{{.Title}}</h1>
+                                <p class="text-xl text-gray-600 mt-1">{{.Author}}</p>
+                            </div>
+                            <span class="px-4 py-2 rounded-full text-sm {{statusColor .Status}}">{{.Status}}</span>
+                        </div>
+                        {{if gt .Rating 0}}<div class="text-2xl text-yellow-500 mt-2">{{stars .Rating}}</div>{{end}}
                     </div>
-                    <span class="px-4 py-2 rounded-full text-sm {{statusColor .Status}}">{{.Status}}</span>
                 </div>
-                {{if gt .Rating 0}}<div class="text-2xl text-yellow-500 mb-4">{{stars .Rating}}</div>{{end}}
                 <div class="grid grid-cols-2 gap-4 text-sm mb-6">
                     {{if .ISBN}}<div><span class="text-gray-500">ISBN:</span> <span class="font-medium">{{.ISBN}}</span></div>{{end}}
                     {{if .Genre}}<div><span class="text-gray-500">Genre:</span> <span class="font-medium">{{.Genre}}</span></div>{{end}}

@@ -10,6 +10,7 @@ type Book struct {
 	Description string    `json:"description,omitempty"`
 	Genre       string    `json:"genre,omitempty"`
 	Tags        []string  `json:"tags,omitempty"`
+	CoverURL    string    `json:"cover_url,omitempty"`   // book cover image URL
 	Rating      int       `json:"rating,omitempty"`      // 1-5 stars
 	Status      Status    `json:"status"`                // want_to_read, reading, read
 	Notes       string    `json:"notes,omitempty"`       // personal notes

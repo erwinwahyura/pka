@@ -39,17 +39,23 @@ type gbItem struct {
 }
 
 type gbVolumeInfo struct {
-	Title               string   `json:"title"`
-	Authors             []string `json:"authors"`
-	Publisher           string   `json:"publisher"`
-	PublishedDate       string   `json:"publishedDate"`
-	Description         string   `json:"description"`
-	IndustryIdentifiers []gbISBN `json:"industryIdentifiers"`
-	Categories          []string `json:"categories"`
-	AverageRating       float64  `json:"averageRating"`
-	RatingsCount        int      `json:"ratingsCount"`
-	PageCount           int      `json:"pageCount"`
-	Language            string   `json:"language"`
+	Title               string        `json:"title"`
+	Authors             []string      `json:"authors"`
+	Publisher           string        `json:"publisher"`
+	PublishedDate       string        `json:"publishedDate"`
+	Description         string        `json:"description"`
+	IndustryIdentifiers []gbISBN      `json:"industryIdentifiers"`
+	Categories          []string      `json:"categories"`
+	AverageRating       float64       `json:"averageRating"`
+	RatingsCount        int           `json:"ratingsCount"`
+	PageCount           int           `json:"pageCount"`
+	Language            string        `json:"language"`
+	ImageLinks          gbImageLinks  `json:"imageLinks"`
+}
+
+type gbImageLinks struct {
+	SmallThumbnail string `json:"smallThumbnail"`
+	Thumbnail      string `json:"thumbnail"`
 }
 
 type gbISBN struct {
@@ -206,6 +212,16 @@ func (c *GoogleBooksClient) itemsToBooks(items []gbItem) []book.Book {
 			}
 		}
 
+		// Get cover URL (prefer thumbnail over smallThumbnail)
+		coverURL := vi.ImageLinks.Thumbnail
+		if coverURL == "" {
+			coverURL = vi.ImageLinks.SmallThumbnail
+		}
+		// Google Books URLs use http, convert to https
+		if strings.HasPrefix(coverURL, "http://") {
+			coverURL = "https://" + coverURL[7:]
+		}
+
 		books = append(books, book.Book{
 			Title:       vi.Title,
 			Author:      author,
@@ -213,6 +229,7 @@ func (c *GoogleBooksClient) itemsToBooks(items []gbItem) []book.Book {
 			Description: truncateGB(vi.Description, 500),
 			Genre:       genre,
 			Tags:        tags,
+			CoverURL:    coverURL,
 			Status:      book.StatusWantToRead,
 			DateAdded:   time.Now(),
 		})

@@ -287,6 +287,7 @@ func (s *Server) handleDiscoverAdd(w http.ResponseWriter, r *http.Request) {
 		ISBN:        r.FormValue("isbn"),
 		Genre:       r.FormValue("genre"),
 		Description: r.FormValue("description"),
+		CoverURL:    r.FormValue("cover_url"),
 		Status:      book.StatusWantToRead,
 		DateAdded:   time.Now(),
 	}
