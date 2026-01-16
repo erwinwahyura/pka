@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -93,6 +96,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/add", s.handleAdd)
 	s.mux.HandleFunc("/edit/", s.handleEdit)
 	s.mux.HandleFunc("/delete/", s.handleDelete)
+	s.mux.HandleFunc("/export", s.handleExport)
+	s.mux.HandleFunc("/import", s.handleImport)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -514,6 +519,181 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	s.bookService.Delete(r.Context(), id)
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
+}
+
+func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "json"
+	}
+
+	books, err := s.bookService.List(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	switch format {
+	case "csv":
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename=pka-books.csv")
+
+		writer := csv.NewWriter(w)
+		writer.Write([]string{"ID", "Title", "Author", "ISBN", "Genre", "Description", "Tags", "Rating", "Status", "Notes", "CoverURL", "DateAdded", "DateRead"})
+
+		for _, b := range books {
+			tags := strings.Join(b.Tags, "|")
+			dateRead := ""
+			if !b.DateRead.IsZero() {
+				dateRead = b.DateRead.Format(time.RFC3339)
+			}
+			writer.Write([]string{
+				strconv.FormatInt(b.ID, 10),
+				b.Title,
+				b.Author,
+				b.ISBN,
+				b.Genre,
+				b.Description,
+				tags,
+				strconv.Itoa(b.Rating),
+				string(b.Status),
+				b.Notes,
+				b.CoverURL,
+				b.DateAdded.Format(time.RFC3339),
+				dateRead,
+			})
+		}
+		writer.Flush()
+
+	default: // json
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", "attachment; filename=pka-books.json")
+		json.NewEncoder(w).Encode(books)
+	}
+}
+
+func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		s.render(w, "import.html", nil)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/import", http.StatusSeeOther)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		s.render(w, "import.html", map[string]string{"Error": "Please select a file to import"})
+		return
+	}
+	defer file.Close()
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	var imported, skipped int
+	var importErr error
+
+	if strings.HasSuffix(header.Filename, ".json") {
+		imported, skipped, importErr = s.importJSON(ctx, file)
+	} else if strings.HasSuffix(header.Filename, ".csv") {
+		imported, skipped, importErr = s.importCSV(ctx, file)
+	} else {
+		s.render(w, "import.html", map[string]string{"Error": "Unsupported file format. Please use .json or .csv"})
+		return
+	}
+
+	if importErr != nil {
+		s.render(w, "import.html", map[string]string{"Error": importErr.Error()})
+		return
+	}
+
+	s.render(w, "import.html", map[string]any{
+		"Success":  true,
+		"Imported": imported,
+		"Skipped":  skipped,
+	})
+}
+
+func (s *Server) importJSON(ctx context.Context, r io.Reader) (imported, skipped int, err error) {
+	var books []book.Book
+	if err := json.NewDecoder(r).Decode(&books); err != nil {
+		return 0, 0, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	for i := range books {
+		books[i].ID = 0 // Reset ID for new insert
+		books[i].DateAdded = time.Now()
+		if err := s.bookService.Add(ctx, &books[i]); err != nil {
+			if _, ok := err.(*book.DuplicateError); ok {
+				skipped++
+			}
+		} else {
+			imported++
+		}
+	}
+
+	return imported, skipped, nil
+}
+
+func (s *Server) importCSV(ctx context.Context, r io.Reader) (imported, skipped int, err error) {
+	reader := csv.NewReader(r)
+
+	// Skip header
+	if _, err := reader.Read(); err != nil {
+		return 0, 0, fmt.Errorf("invalid CSV: %w", err)
+	}
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return imported, skipped, fmt.Errorf("CSV read error: %w", err)
+		}
+
+		if len(record) < 9 {
+			continue // Skip invalid rows
+		}
+
+		rating, _ := strconv.Atoi(record[7])
+		var tags []string
+		if record[6] != "" {
+			tags = strings.Split(record[6], "|")
+		}
+
+		b := &book.Book{
+			Title:       record[1],
+			Author:      record[2],
+			ISBN:        record[3],
+			Genre:       record[4],
+			Description: record[5],
+			Tags:        tags,
+			Rating:      rating,
+			Status:      book.Status(record[8]),
+			DateAdded:   time.Now(),
+		}
+
+		if len(record) > 9 {
+			b.Notes = record[9]
+		}
+		if len(record) > 10 {
+			b.CoverURL = record[10]
+		}
+
+		if err := s.bookService.Add(ctx, b); err != nil {
+			if _, ok := err.(*book.DuplicateError); ok {
+				skipped++
+			}
+		} else {
+			imported++
+		}
+	}
+
+	return imported, skipped, nil
 }
 
 func (s *Server) render(w http.ResponseWriter, name string, data any) {
