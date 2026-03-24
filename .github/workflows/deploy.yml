@@ -72,21 +72,21 @@ jobs:
             git reset --hard origin/main
 
             # Stop running containers (preserves volumes)
-            docker-compose down
+            docker compose down
 
             # Remove old images to free space
             docker image prune -f
 
             # Build and start services
-            docker-compose up -d --build
+            docker compose up -d --build
 
             # Wait for services to be healthy
             sleep 10
 
             # Check if containers are running
-            if ! docker-compose ps | grep -q "Up"; then
+            if ! docker compose ps | grep -q "Up"; then
               echo "Deployment failed - containers not running"
-              docker-compose logs
+              docker compose logs
               exit 1
             fi
 
@@ -101,7 +101,7 @@ jobs:
             fi
 
             echo "Deployment successful!"
-            docker-compose ps
+            docker compose ps
 
       - name: Verify Deployment
         uses: appleboy/ssh-action@v1.0.3
